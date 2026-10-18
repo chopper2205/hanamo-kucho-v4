@@ -11,14 +11,33 @@ import admin from "firebase-admin";
 import webpush from "web-push";
 import { runJob } from "./job.mjs";
 
-const need = (k) => { const v = process.env[k]; if (!v) { console.error(`設定がありません: ${k}`); process.exit(1); } return v; };
-const sa = JSON.parse(need("FIREBASE_SERVICE_ACCOUNT"));
-admin.initializeApp({ credential: admin.credential.cert(sa) });
-const db = admin.firestore();
-webpush.setVapidDetails(need("VAPID_SUBJECT"), need("VAPID_PUBLIC_KEY"), need("VAPID_PRIVATE_KEY"));
+// どの段階で失敗したかを、秘密の中身を出さずに知らせる
+const fail = (stage, hint, e) => {
+  const code = e && (e.code || e.status || e.statusCode) ? `（種別: ${e.code || e.status || e.statusCode}）` : "";
+  const msg = e && e.message ? String(e.message).split("\n")[0].replace(/-----BEGIN[\s\S]*?-----END[^-]*-----/g, "[鍵]").slice(0, 200) : "";
+  console.error(`✗ ${stage}で失敗しました${code}\n  考えられる原因: ${hint}\n  詳細: ${msg}`);
+  process.exit(1);
+};
+const need = (k, hint) => { const v = (process.env[k] || "").trim(); if (!v) fail(`設定 ${k} の読み込み`, hint || `GitHub の Secrets に ${k} が登録されていない（名前の綴り違いを含む）`); return v; };
+
+let sa;
+try { sa = JSON.parse(need("FIREBASE_SERVICE_ACCOUNT")); }
+catch (e) { fail("サービスアカウント鍵（FIREBASE_SERVICE_ACCOUNT）の読み取り", "JSONファイルの中身が全部貼られていない（最初の { から最後の } まで）、または余計な文字が混ざっている", e); }
+if (!sa.private_key || !sa.client_email || !sa.project_id) fail("サービスアカウント鍵の確認", "貼ったJSONがサービスアカウント鍵ではない（private_key / client_email / project_id が無い）。Firebaseの「サービス アカウント」→「新しい秘密鍵を生成」でできたファイルの中身を貼る");
+console.log(`① 鍵を読み込みました（プロジェクト: ${sa.project_id}）`);
+try { webpush.setVapidDetails(need("VAPID_SUBJECT"), need("VAPID_PUBLIC_KEY"), need("VAPID_PRIVATE_KEY")); }
+catch (e) { fail("通知用の鍵（VAPID）の確認", "VAPID_PRIVATE_KEY の値が違う（前後の空白や改行、1文字欠けなど）", e); }
+console.log("② 通知用の鍵を確認しました");
+
+let db;
+try { admin.initializeApp({ credential: admin.credential.cert(sa) }); db = admin.firestore(); }
+catch (e) { fail("Firebaseへの接続準備", "サービスアカウント鍵が壊れている（貼り付け時に改行が崩れた等）。鍵を作り直して貼り直す", e); }
 
 // 全員の通知用文書だけを読む（句のデータには触れない）。読み取りは人数分
-const snap = await db.collectionGroup("notify").get();
+let snap;
+try { snap = await db.collectionGroup("notify").get(); }
+catch (e) { fail("Firestoreの読み取り", "鍵のプロジェクトがアプリと違う／鍵が無効化された／Firestoreが作成されていない", e); }
+console.log(`③ 通知用の文書を読みました（${snap.size}件）`);
 const docs = snap.docs.filter((d) => d.id === "main").map((d) => ({ id: d.ref.path, data: d.data(), ref: d.ref }));
 
 const sum = await runJob({
