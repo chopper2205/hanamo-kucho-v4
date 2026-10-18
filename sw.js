@@ -2,7 +2,7 @@
 // ・電波があるときは常に最新版を取りに行く（更新がすぐ届く）
 // ・電波が無いときは、前回保存した版で起動する
 // ・句のデータ（IndexedDB）には一切触れない
-const CACHE = "hanamo-v4-202610181545";
+const CACHE = "hanamo-v4-202610181604";
 const FILES = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png", "./favicon.png"];
 
 self.addEventListener("install", (e) => {
@@ -35,4 +35,29 @@ self.addEventListener("fetch", (e) => {
   }
   // アイコン等：保存版を優先
   e.respondWith(caches.match(req).then((r) => r || fetch(req)));
+});
+
+// 締切の通知（送信側から届いたプッシュを表示する）
+self.addEventListener("push", (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (err) { d = { title: "花藻句帳", body: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(d.title || "花藻句帳", {
+    body: d.body || "",
+    icon: "icon-192.png",
+    badge: "icon-192.png",
+    tag: d.tag || "hanamo",
+    renotify: true,
+    data: { url: d.url || "./" },
+  }));
+});
+
+// 通知をタップしたらアプリを開く（開いていれば前面に）
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = new URL((e.notification.data && e.notification.data.url) || "./", self.registration.scope).href;
+  e.waitUntil((async () => {
+    const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const c of all) { if (c.url.startsWith(self.registration.scope)) { await c.focus(); return; } }
+    await self.clients.openWindow(url);
+  })());
 });

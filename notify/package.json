@@ -1,0 +1,10 @@
+{
+  "name": "hanamo-kucho-notify",
+  "private": true,
+  "type": "module",
+  "description": "花藻句帳 v4 締切の通知（GitHub Actions から1時間ごとに実行）",
+  "dependencies": {
+    "firebase-admin": "^13.10.0",
+    "web-push": "^3.6.7"
+  }
+}

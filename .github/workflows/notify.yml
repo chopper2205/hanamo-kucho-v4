@@ -1,0 +1,54 @@
+name: 締切の通知
+
+on:
+  schedule:
+    - cron: "7 * * * *"   # 毎時7分ごろ（混雑時は遅れることがある。送信判定は遅れても取りこぼさない作り）
+  workflow_dispatch:       # 手動でも実行できる（Actions タブ →「締切の通知」→ Run workflow）
+
+permissions:
+  contents: write          # 60日停止対策の空コミットにだけ使う
+
+concurrency:
+  group: notify
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: notify/package-lock.json
+
+      - name: 部品の準備
+        working-directory: notify
+        run: npm ci --omit=dev
+
+      - name: 通知を送る
+        working-directory: notify
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_PUBLIC_KEY: "BMQzGhHEcgNIeVO8YiRBUR1Lt3qTfbxy8Cfj8tl0wk1PiPI2iIeOTCfc4SLnlHVMuQdt33RGieXLJH6eRNBFxCI"
+          VAPID_SUBJECT: "https://chopper2205.github.io/hanamo-kucho-v4/"
+        run: node send.mjs
+
+      # GitHubは、公開リポジトリで60日間更新がないと定時実行を自動で止める。
+      # 最後の更新から45日たったら、中身のない更新を1回入れて止まらないようにする
+      - name: 定時実行が止まらないようにする
+        run: |
+          last=$(git log -1 --format=%ct)
+          now=$(date +%s)
+          if [ $(( (now - last) / 86400 )) -ge 45 ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit --allow-empty -m "定時実行の維持（自動）"
+            git push
+          fi
