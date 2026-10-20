@@ -1,7 +1,8 @@
 // 花藻句帳 v4：クラウドの控え（毎月の自動バックアップ）。アプリ側と送信側（GitHub Actions）の両方で使う
 //
 // クラウドの持ち方（1人あたり）
-//   users/{uid}/backup/index            控えの一覧 { months: [{ id:"2026-10", at, n, counts }] }（新しい順）
+//   users/{uid}/backup/index            控えの一覧 { months: [{ id:"2026-10", at, n, counts }]（新しい順）, pre: { at, n, counts } }
+//   users/{uid}/backup/before-restore   戻す直前の状態（取り消し用・直近1回分。かたまりの置き方は月の控えと同じ）
 //   users/{uid}/backup/{YYYY-MM}        控え1件の目次 { at, n, sig[], counts, ver }
 //   users/{uid}/backup/{YYYY-MM}/chunks/c0..  データのかたまり { s }（同期用のかたまりをそのまま複製）
 //
@@ -9,9 +10,10 @@
 // ・新しい順に KEEP 件だけ残し、古いものは消す
 // ・句が急に半分以下に減っていたら（誤って消した可能性）、その月は古い控えを消さずに1件多く残す
 // ・データが空のときは控えを作らない（空の控えで良い控えを押し出さない）
-import { hash, isEmptyData } from "./merge.js";
+import { hash, isEmptyData, payloadOf, splitChunks } from "./merge.js";
 
 export const KEEP = 3;
+export const PRE_ID = "before-restore"; // 「この時点に戻す」を押す直前の状態（直近1回分。取り消し用）
 export const indexPath = (uid) => `users/${uid}/backup/index`;
 export const snapPath = (uid, id) => `users/${uid}/backup/${id}`;
 export const snapChunkPath = (uid, id, i) => `users/${uid}/backup/${id}/chunks/c${i}`;
@@ -65,7 +67,7 @@ export async function runBackup({ users, get, set, del, now = Date.now(), keep =
       const limit = keep + (drop ? 1 : 0);
       const kept = all.slice(0, limit);
       const gone = all.slice(limit);
-      await set(indexPath(uid), { months: kept });
+      await set(indexPath(uid), { ...idx, months: kept }); // 戻す直前の状態（pre）は消さない
       sum.made++;
 
       // 一覧から外したものを消す（失敗しても一覧には載らないので害はない）
@@ -107,6 +109,23 @@ export async function backupPaths(get, uid) {
     for (let i = 0; i < (m.n || 0) + 1; i++) paths.push(snapChunkPath(uid, m.id, i));
     paths.push(snapPath(uid, m.id));
   }
+  if (idx && idx.pre) {
+    for (let i = 0; i < (idx.pre.n || 0) + 1; i++) paths.push(snapChunkPath(uid, PRE_ID, i));
+    paths.push(snapPath(uid, PRE_ID));
+  }
   paths.push(indexPath(uid));
   return paths;
+}
+
+// 戻す直前の状態を、取り消し用の控えとしてクラウドに保存する（直近1回分を上書き）
+// tx: { get(path), set(path, data), delete(path) }（トランザクションの中で呼ぶ）
+export async function savePreRestore(tx, uid, d, at) {
+  const idx = (await tx.get(indexPath(uid))) || { months: [] };
+  const oldN = idx.pre ? idx.pre.n || 0 : 0;
+  const chunks = splitChunks(payloadOf(d));
+  const counts = countsOf(d);
+  chunks.forEach((s, i) => tx.set(snapChunkPath(uid, PRE_ID, i), { s }));
+  for (let i = chunks.length; i < oldN; i++) tx.delete(snapChunkPath(uid, PRE_ID, i));
+  tx.set(snapPath(uid, PRE_ID), { at, n: chunks.length, sig: chunks.map(hash), counts });
+  tx.set(indexPath(uid), { ...idx, months: Array.isArray(idx.months) ? idx.months : [], pre: { at, n: chunks.length, counts } });
 }
