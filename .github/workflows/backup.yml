@@ -1,0 +1,35 @@
+name: クラウドの控え
+
+on:
+  schedule:
+    - cron: "23 19 * * *"   # 毎日 日本時間4時23分ごろ。その月の控えが無い人だけ作る（＝毎月1日ごろ。失敗しても翌日やり直す）
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: notify/package-lock.json
+      - name: 部品の準備
+        working-directory: notify
+        run: npm ci --omit=dev
+      - name: 控えを作る
+        working-directory: notify
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node backup.mjs
