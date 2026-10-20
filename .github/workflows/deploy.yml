@@ -1,0 +1,28 @@
+name: アプリの公開（Firebase Hosting）
+
+# app/ の中身が変わったら https://hanamo-kucho.web.app/ に公開する
+on:
+  push:
+    branches: [main]
+    paths: ["app/**", "firebase.json"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: FirebaseExtended/action-hosting-deploy@v0
+        with:
+          repoToken: ${{ secrets.GITHUB_TOKEN }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          projectId: hanamo-kucho
+          channelId: live

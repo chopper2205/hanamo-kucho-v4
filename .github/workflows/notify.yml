@@ -37,7 +37,7 @@ jobs:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           VAPID_PUBLIC_KEY: "BMQzGhHEcgNIeVO8YiRBUR1Lt3qTfbxy8Cfj8tl0wk1PiPI2iIeOTCfc4SLnlHVMuQdt33RGieXLJH6eRNBFxCI"
-          VAPID_SUBJECT: "https://chopper2205.github.io/hanamo-kucho-v4/"
+          VAPID_SUBJECT: "https://hanamo-kucho.web.app/"
         run: node send.mjs
 
       # GitHubは、公開リポジトリで60日間更新がないと定時実行を自動で止める。
