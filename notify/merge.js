@@ -50,17 +50,33 @@ function mergeCollection(b, l, r, stats) {
   return out;
 }
 
+// 設定（称号の非表示など）：この端末で変えていればこの端末、そうでなければクラウドを採る
+function cleanSettings(st) {
+  if (!st || typeof st !== "object") return null;
+  const out = {};
+  if (Array.isArray(st.hiddenOutcomes) && st.hiddenOutcomes.length) out.hiddenOutcomes = [...st.hiddenOutcomes];
+  return Object.keys(out).length ? out : null;
+}
+
 export function merge3(base, local, remote) {
   const b = base || {}, l = local || {}, r = remote || {};
   const stats = { conflicts: 0, keptOverDelete: 0 };
   const out = { version: l.version || r.version || 1 };
+  const bs = stable(cleanSettings(b.settings)), ls = stable(cleanSettings(l.settings));
+  const st = bs === ls ? cleanSettings(r.settings) : cleanSettings(l.settings);
+  if (st) out.settings = st;
   for (const c of COLLECTIONS) out[c] = mergeCollection(b[c], l[c], r[c], stats);
   return { data: out, stats };
 }
 
 // 保存用の文字列（アプリ本体の saveData と同じ並び：句を末尾に）
+// settings は中身があるときだけ入れる（設定を使わない人のデータは以前と1文字も変わらない）
 export function payloadOf(d) {
-  return JSON.stringify({ version: (d && d.version) || 1, venues: (d && d.venues) || [], submissions: (d && d.submissions) || [], haikus: (d && d.haikus) || [] });
+  const o = { version: (d && d.version) || 1 };
+  const st = cleanSettings(d && d.settings);
+  if (st) o.settings = st;
+  o.venues = (d && d.venues) || []; o.submissions = (d && d.submissions) || []; o.haikus = (d && d.haikus) || [];
+  return JSON.stringify(o);
 }
 
 export function isEmptyData(d) {
