@@ -29,3 +29,4 @@ jobs:
           firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
           projectId: hanamo-kucho
           channelId: live
+          firebaseToolsVersion: 15.34.0   # 15.34.1（2026-10-21公開）で公開が失敗したため、直前の版に固定
