@@ -2,7 +2,7 @@
 // ・電波があるときは常に最新版を取りに行く（更新がすぐ届く）
 // ・電波が無いときは、前回保存した版で起動する
 // ・句のデータ（IndexedDB）には一切触れない
-const CACHE = "hanamo-v4-202610240027";
+const CACHE = "hanamo-v4-202610240057";
 const FILES = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png", "./favicon.png"];
 
 self.addEventListener("install", (e) => {
